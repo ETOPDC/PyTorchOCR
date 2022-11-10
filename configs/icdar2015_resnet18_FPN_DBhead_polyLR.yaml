@@ -1,0 +1,117 @@
+Global:
+  seed: 2
+  epoch_num: 1200
+  output_dir: output
+  tensorboard: true
+  resume_checkpoint: ''
+  finetune_checkpoint: ''
+  log_iter: 10
+
+
+
+
+
+
+
+
+
+
+
+Architecture:
+  algorithm: DBNet
+  Transform:
+  Backbone:
+    name: resnet18
+    pretrained: true
+  Neck:
+    name: DBFPN
+    inner_channels: 256
+  Head:
+    name: DBHead
+    out_channels: 2
+    k: 50
+
+PostProcess:
+  name: DBPostProcess
+  thresh: 0.3
+  box_thresh: 0.7
+  max_candidates: 1000
+  unclip_ratio: 1.5 # from paper
+
+Metric:
+  name: DBMetric
+  is_output_polygon: false
+
+Loss:
+  name: DBLoss
+  alpha: 1
+  beta: 10
+  ohem_ratio: 3
+
+Optimizer:
+  name: Adam
+  lr: 0.001
+  weight_decay: 0
+  amsgrad: true
+  Lr_scheduler:
+    name: WarmupPolyLR
+    warmup_epoch: 3
+
+Train:
+  dataset:
+    name: ICDAR2015Dataset
+    data_path: ./datasets/train.txt
+    img_mode: RGB
+    pre_processes:
+      - IaaAugment:
+          augmenter_args:
+            - { 'type': Fliplr, 'args': { 'p': 0.5 } }
+            - { 'type': Affine, 'args': { 'rotate': [ -10,10 ] } }
+            - { 'type': Resize,'args': { 'size': [ 0.5,3 ] } }
+      - EastRandomCropData:
+          size: [ 640,640 ]
+          max_tries: 50
+          keep_ratio: true
+      - MakeBorderMap:
+          shrink_ratio: 0.4
+          thresh_min: 0.3
+          thresh_max: 0.7
+      - MakeShrinkMap:
+          shrink_ratio: 0.4
+          min_text_size: 8
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [ 0.485, 0.456, 0.406 ]
+          std: [ 0.229, 0.224, 0.225 ]
+    keep_keys: [ 'img', 'threshold_map', 'threshold_mask', 'shrink_map', 'shrink_mask' ]
+    filter_keys: [img_path,img_name,text_polys,texts,ignore_tags,shape]
+    ignore_tags: ['*', '###']
+  loader:
+    batch_size: 1
+    shuffle: true
+    pin_memory: false
+    num_workers: 0
+    collate_fn: ''
+
+Eval:
+  dataset:
+    name: ICDAR2015Dataset
+    data_path: ./train_data/test.txt
+    img_mode: RGB
+    pre_processes:
+      - ResizeShortSize:
+          short_size: 736
+          resize_text_polys: false
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [ 0.485, 0.456, 0.406 ]
+          std: [ 0.229, 0.224, 0.225 ]
+    keep_keys: [ 'img', 'shape', 'polys', 'ignore_tags' ]
+  loader:
+    batch_size: 1
+    shuffle: true
+    pin_memory: false
+    num_workers: 0
+    collate_fn: ICDARCollectFN
